@@ -38,6 +38,20 @@ def load_clean_power_data(file_path: str) -> pd.DataFrame:
     header_idxs = [i for i, line in enumerate(lines) if "DATE" in line.upper() and "TIME" in line.upper()]
     from io import StringIO
 
+    # 全体を一度読み込んでおく（フォールバック用）
+    try:
+        df = pd.read_csv(StringIO("".join(lines)))
+        if 'time' in df.columns:
+            df['time'] = pd.to_datetime(df['time'], errors='coerce')
+        else:
+            if 'DATE' in df.columns and 'TIME' in df.columns:
+                df['_DATE_parsed'] = pd.to_datetime(df['DATE'].astype(str), errors='coerce')
+                df['_TIME_clean'] = df['TIME'].astype(str).str.extract(r"(\d{1,2}:\d{2})")[0].fillna('00:00')
+                df['time'] = pd.to_datetime(df['_DATE_parsed'].dt.strftime('%Y-%m-%d') + ' ' + df['_TIME_clean'])
+                df = df.drop(columns=[c for c in ['_DATE_parsed', '_TIME_clean'] if c in df.columns])
+    except Exception:
+        df = pd.DataFrame()
+
     candidate_blocks = []
     if header_idxs:
         for idx_i, idx in enumerate(header_idxs):
@@ -95,6 +109,29 @@ def load_clean_power_data(file_path: str) -> pd.DataFrame:
 
             candidate_blocks.append((unique_hours, block_df))
 
+    def _finalize_df(df_in):
+        """Coerce numeric columns, drop missing 'power', set DatetimeIndex (Asia/Tokyo)."""
+        df_work = df_in.copy()
+        for c in ["power", "predicted_power", "usage_rate", "capacity"]:
+            if c in df_work.columns:
+                df_work[c] = pd.to_numeric(df_work[c].astype(str).str.replace(',', ''), errors='coerce')
+        # drop rows missing power
+        if 'power' in df_work.columns:
+            df_work = df_work[~df_work['power'].isna()].copy()
+        # ensure time column exists and make it index with timezone
+        if 'time' in df_work.columns:
+            df_work = df_work.sort_values('time')
+            try:
+                if df_work['time'].dt.tz is None:
+                    df_work['time'] = df_work['time'].dt.tz_localize('Asia/Tokyo')
+                else:
+                    df_work['time'] = df_work['time'].dt.tz_convert('Asia/Tokyo')
+            except Exception:
+                df_work['time'] = pd.to_datetime(df_work['time'])
+                df_work['time'] = df_work['time'].dt.tz_localize('Asia/Tokyo')
+            df_work = df_work.set_index('time')
+        return df_work
+
     # 候補から 24 時間分を持つブロックを優先して選択
     if candidate_blocks:
         # sort by unique_hours desc
@@ -106,8 +143,9 @@ def load_clean_power_data(file_path: str) -> pd.DataFrame:
                 hourly = hourly.sort_values("time").reset_index(drop=True)
                 # 24以上なら先頭の24を、未満ならそのまま返す
                 if len(hourly) >= 24:
-                    return hourly.iloc[:24].reset_index(drop=True)
-                return hourly.reset_index(drop=True)
+                    sel = hourly.iloc[:24].reset_index(drop=True)
+                    return _finalize_df(sel)
+                return _finalize_df(hourly.reset_index(drop=True))
 
     # 候補が見つからない場合は、従来の全体データを返す（可能なら分が00の行を優先）
     try:
@@ -116,9 +154,9 @@ def load_clean_power_data(file_path: str) -> pd.DataFrame:
         if not hourly.empty:
             hourly = hourly.sort_values("time").reset_index(drop=True)
             if len(hourly) >= 24:
-                return hourly.iloc[:24].reset_index(drop=True)
-            return hourly.reset_index(drop=True)
+                return _finalize_df(hourly.iloc[:24].reset_index(drop=True))
+            return _finalize_df(hourly.reset_index(drop=True))
     except Exception:
         pass
 
-    return df.reset_index(drop=True)
+    return _finalize_df(df.reset_index(drop=True))
