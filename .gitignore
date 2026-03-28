@@ -1,0 +1,74 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# C extensions
+*.so
+
+# Virtualenv
+venv/
+ENV/
+env/
+.venv/
+
+# Distribution / packaging
+build/
+dist/
+*.egg-info/
+
+# Installer logs
+pip-log.txt
+pip-delete-this-directory.txt
+
+# Pytest
+.pytest_cache/
+
+# Coverage
+.coverage
+htmlcov/
+.coverage.*
+
+# IPython
+profile_default/
+ipython_config.py
+
+# Jupyter
+.ipynb_checkpoints
+
+# VSCode / IDE
+.vscode/
+.idea/
+
+# macOS
+.DS_Store
+
+# Environment variables
+.env
+.env.local
+.env.*.local
+
+# Logs
+logs/
+*.log
+
+# Local settings
+local_settings.py
+
+# Mypy
+.mypy_cache/
+
+# Python version manager
+.python-version
+
+# Cache
+.cache/
+
+# Sphinx
+docs/_build/
+
+# Data files (ignore common large data outputs)
+data/*.csv
+data/*.parquet
+data/*.feather
+data/*.pkl
