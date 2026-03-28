@@ -73,3 +73,10 @@ data/*.parquet
 data/*.feather
 data/*.pkl
 data/raw/*.csv
+# Also ignore data files under src/ (project uses src/data/...)
+src/data/*.csv
+src/data/*.parquet
+src/data/*.feather
+src/data/*.pkl
+src/data/raw/*.csv
+src/data/raw/**/*.csv
