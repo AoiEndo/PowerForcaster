@@ -1,13 +1,25 @@
 import pandas as pd
 
 
-def build_features(power_df: pd.DataFrame, weather_df: pd.DataFrame,
-                   weather_vars=None, merge_tolerance_minutes: int = 30) -> pd.DataFrame:
-    """Merge power and weather into a single feature DataFrame.
+def build_features(
+    power_df: pd.DataFrame,
+    weather_df: pd.DataFrame,
+    weather_vars=None,
+    merge_tolerance_minutes: int = 30,
+    add_lags=(1, 24, 168),
+    add_moving_averages=(3, 24),
+    add_time_features: bool = True,
+) -> pd.DataFrame:
+    """Merge power and weather and add common time-series features.
 
-    - `power_df` is expected to have a DatetimeIndex (tz-aware) or a `time` column.
-    - `weather_df` is expected to have a `time` column (datetime-like) and weather vars.
-    - Returns a DataFrame indexed by time with numeric feature columns.
+    Features added:
+    - nearest weather merge (merge_asof) within `merge_tolerance_minutes`
+    - numeric coercion for key columns
+    - optional lag features for `power` (hours)
+    - optional moving averages for `power`
+    - optional time features: hour, dayofweek, is_weekend
+
+    Returns DataFrame indexed by time (tz-aware if available).
     """
     if weather_vars is None:
         weather_vars = ["temperature_2m", "relativehumidity_2m", "precipitation"]
@@ -50,15 +62,34 @@ def build_features(power_df: pd.DataFrame, weather_df: pd.DataFrame,
     pw = pw.sort_values("time")
 
     # merge_asof to align nearest weather observation within tolerance
-    merged = pd.merge_asof(pw, wsel, on="time", direction="nearest",
-                           tolerance=pd.Timedelta(f"{merge_tolerance_minutes}min"))
+    merged = pd.merge_asof(
+        pw, wsel, on="time", direction="nearest",
+        tolerance=pd.Timedelta(f"{merge_tolerance_minutes}min"),
+    )
 
-    # Ensure numeric conversion
+    # Ensure numeric conversion for core columns
     for c in ["power", "predicted_power", "usage_rate", "capacity"] + weather_vars:
         if c in merged.columns:
             merged[c] = pd.to_numeric(merged[c], errors="coerce")
 
     # set time index
-    merged = merged.set_index("time")
+    merged = merged.set_index("time").sort_index()
+
+    # time features
+    if add_time_features:
+        merged["hour"] = merged.index.hour
+        merged["dayofweek"] = merged.index.dayofweek
+        merged["is_weekend"] = merged["dayofweek"].isin([5, 6]).astype(int)
+
+    # lag features for power
+    if "power" in merged.columns and add_lags:
+        for lag in add_lags:
+            merged[f"lag_{lag}"] = merged["power"].shift(lag)
+
+    # moving averages for power
+    if "power" in merged.columns and add_moving_averages:
+        for window in add_moving_averages:
+            merged[f"ma_{window}"] = merged["power"].rolling(window=window, min_periods=1).mean()
+
     return merged
 

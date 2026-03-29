@@ -10,7 +10,9 @@ def train_baseline(df: pd.DataFrame, feature_cols, target_col: str = "power") ->
     Expects `df` indexed by time and with numeric columns.
     Splits: first 75% train, last 25% test (time-ordered).
     """
-    df = df.dropna(subset=[target_col])
+    # drop rows with missing target or missing features
+    required = [target_col] + list(feature_cols)
+    df = df.dropna(subset=required)
     X = df[feature_cols].copy()
     y = df[target_col].copy()
 

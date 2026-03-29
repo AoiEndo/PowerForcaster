@@ -160,3 +160,55 @@ def load_clean_power_data(file_path: str) -> pd.DataFrame:
         pass
 
     return _finalize_df(df.reset_index(drop=True))
+
+
+def load_all_power_data(root_dir: str = "src/data/raw") -> pd.DataFrame:
+    """Find all CSVs under `root_dir`, load and normalize them into one DataFrame.
+
+    - Uses `load_clean_power_data` for each file, then concatenates results.
+    - Ensures a DatetimeIndex with Asia/Tokyo tz, numeric columns coerced, duplicates removed.
+    """
+    import glob
+    import os
+
+    pattern = os.path.join(root_dir, "**", "*.csv")
+    files = sorted(glob.glob(pattern, recursive=True))
+    parts = []
+    for fp in files:
+        try:
+            p = load_clean_power_data(fp)
+            parts.append(p)
+        except Exception:
+            # skip problematic files
+            continue
+
+    if not parts:
+        return pd.DataFrame()
+
+    df = pd.concat(parts)
+
+    # Ensure datetime index
+    if not isinstance(df.index, pd.DatetimeIndex):
+        if 'time' in df.columns:
+            df['time'] = pd.to_datetime(df['time'], errors='coerce')
+            try:
+                if df['time'].dt.tz is None:
+                    df['time'] = df['time'].dt.tz_localize('Asia/Tokyo')
+                else:
+                    df['time'] = df['time'].dt.tz_convert('Asia/Tokyo')
+            except Exception:
+                df['time'] = pd.to_datetime(df['time'])
+                df['time'] = df['time'].dt.tz_localize('Asia/Tokyo')
+            df = df.set_index('time')
+
+    # Coerce numeric cols
+    for c in ['power', 'predicted_power', 'usage_rate', 'capacity']:
+        if c in df.columns:
+            df[c] = pd.to_numeric(df[c], errors='coerce')
+
+    # drop missing power rows and duplicated timestamps
+    if 'power' in df.columns:
+        df = df[~df['power'].isna()].copy()
+    df = df[~df.index.duplicated(keep='first')]
+    df = df.sort_index()
+    return df

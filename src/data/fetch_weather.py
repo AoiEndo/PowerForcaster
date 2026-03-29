@@ -6,7 +6,7 @@ from typing import Optional
 
 def fetch_weather_open_meteo(latitude: float = 35.68,
                              longitude: float = 139.76,
-                             past_days: int = 30,
+                             past_days: int = 60,
                              timezone: str = "Asia/Tokyo") -> pd.DataFrame:
     """Fetch hourly weather data from Open-Meteo and return a DataFrame.
 
@@ -34,14 +34,16 @@ def fetch_weather_open_meteo(latitude: float = 35.68,
 
     df = pd.DataFrame(data["hourly"])
     t = pd.to_datetime(df["time"]) 
-    # normalize timezone-aware or naive timestamps to naive UTC-localized datetimes
+    # Ensure timestamps are timezone-aware in the requested timezone.
+    # If the API returns naive times, localize them; if tz-aware, convert to target timezone.
     try:
-        t = t.dt.tz_convert(None)
+        if t.dt.tz is None:
+            t = t.dt.tz_localize(timezone)
+        else:
+            t = t.dt.tz_convert(timezone)
     except Exception:
-        try:
-            t = t.dt.tz_localize(None)
-        except Exception:
-            t = t.astype("datetime64[ns]")
+        # Fallback: keep naive datetimes if something unexpected happens
+        t = pd.to_datetime(df["time"])
     df["time"] = t
     return df
 
