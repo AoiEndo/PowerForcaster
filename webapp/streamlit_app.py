@@ -4,6 +4,13 @@ Run with: `streamlit run webapp/streamlit_app.py`
 """
 import streamlit as st
 import pandas as pd
+import sys
+from pathlib import Path
+
+# Ensure repository root is on sys.path so `from src...` works in hosted runtimes
+repo_root = Path(__file__).resolve().parents[1]
+if str(repo_root) not in sys.path:
+    sys.path.insert(0, str(repo_root))
 
 from src.webapp.interface import load_power, numeric_columns, plot_column_figure
 
