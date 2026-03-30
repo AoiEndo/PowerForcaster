@@ -17,7 +17,7 @@ def load_power(root_dir: Optional[str] = None) -> pd.DataFrame:
     with numeric columns like `power`, `predicted_power`, etc.
     """
     if root_dir is None:
-        root_dir = "src/data/raw"
+        root_dir = "src/data"
     return load_all_power_data(root_dir)
 
 

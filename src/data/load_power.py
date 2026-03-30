@@ -1,5 +1,13 @@
-"""Load power consumption data utilities with cleaning for Japanese CSVs."""
+"""Load power consumption data utilities with cleaning for Japanese CSVs.
+
+Provides helpers to resolve file paths when callers pass partial or
+shallow paths (for example notebooks that expect `src/data/raw/YYYYMM_...`).
+If a supplied path does not exist, the loader will try to locate the file
+under `src/data/raw` recursively and use the first matching basename.
+"""
 import pandas as pd
+import glob
+import os
 
 
 def load_power_csv(path: str, parse_dates=None) -> pd.DataFrame:
@@ -14,6 +22,25 @@ def load_clean_power_data(file_path: str) -> pd.DataFrame:
     - Looks for header line containing: "DATE,TIME,当日実績"
     - Builds a `time` column and renames columns to English keys.
     """
+    # If the provided path doesn't exist, try to locate file under src/data/raw
+    if not os.path.exists(file_path):
+        # search under this package's raw directory
+        data_root = os.path.join(os.path.dirname(__file__), "raw")
+        if os.path.isdir(data_root):
+            # try to find by basename first
+            base = os.path.basename(file_path)
+            candidates = glob.glob(os.path.join(data_root, "**", base), recursive=True)
+            if candidates:
+                file_path = candidates[0]
+        # final fallback: try fuzzy search for the last two path parts
+        if not os.path.exists(file_path):
+            parts = os.path.normpath(file_path).split(os.sep)
+            if len(parts) >= 2:
+                suffix = os.path.join(parts[-2], parts[-1])
+                candidates = glob.glob(os.path.join(data_root, "**", suffix), recursive=True)
+                if candidates:
+                    file_path = candidates[0]
+
     # 多くの日本のCSVは Shift-JIS だが UTF-8 の場合もある。まず UTF-8 を試し、失敗またはヘッダが見つからなければ Shift-JIS を試す。
     encodings_to_try = ["utf-8", "shift_jis"]
     lines = None
@@ -162,8 +189,8 @@ def load_clean_power_data(file_path: str) -> pd.DataFrame:
     return _finalize_df(df.reset_index(drop=True))
 
 
-def load_all_power_data(root_dir: str = "src/data/raw") -> pd.DataFrame:
-    """Find all CSVs under `root_dir`, load and normalize them into one DataFrame.
+def load_all_power_data(root_dir: str = "src/data") -> pd.DataFrame:
+    """Find all CSVs under `root_dir` (recursively), load and normalize them into one DataFrame.
 
     - Uses `load_clean_power_data` for each file, then concatenates results.
     - Ensures a DatetimeIndex with Asia/Tokyo tz, numeric columns coerced, duplicates removed.
@@ -171,6 +198,7 @@ def load_all_power_data(root_dir: str = "src/data/raw") -> pd.DataFrame:
     import glob
     import os
 
+    # recurse through subdirectories to find CSVs
     pattern = os.path.join(root_dir, "**", "*.csv")
     files = sorted(glob.glob(pattern, recursive=True))
     parts = []
